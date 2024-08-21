@@ -1,4 +1,4 @@
-use std::{io::BufRead, os::unix::fs::MetadataExt};
+use std::{io::BufRead, os::unix::fs::MetadataExt, path::PathBuf};
 
 use clap::Parser as _;
 
@@ -12,6 +12,11 @@ fn main() {
 
     languages.sort();
 
+    if let Some(language) = arguments.find {
+        languages.find(&language);
+        return;
+    }
+
     match arguments.output {
         OutputFormat::HumanReadable => languages.display(),
         OutputFormat::Json => println!("{}", serde_json::to_string(&languages).unwrap()),
@@ -24,7 +29,7 @@ const IGNORED_DIRECTORIES: &'static [&'static str] = &["node_modules", "target",
 #[derive(serde::Serialize, PartialEq, Eq)]
 struct LanguageInfo {
     name: &'static str,
-    files: u32,
+    files: Vec<String>,
     lines: u32,
     bytes: u64,
 }
@@ -45,7 +50,7 @@ impl LanguageInfo {
     fn new(name: &'static str) -> Self {
         Self {
             name,
-            files: 0,
+            files: Vec::new(),
             lines: 0,
             bytes: 0,
         }
@@ -58,22 +63,46 @@ struct LanguageList {
 }
 
 impl LanguageList {
-    fn add_file(&mut self, name: &'static str, lines: u32, bytes: u64) {
-        let info = self.languages.iter_mut().find(|language| language.name == name);
-        let info = if let Some(info) = info {
-            info
-        } else {
-            let value = LanguageInfo::new(name);
-            self.languages.push(value);
-            self.languages.last_mut().unwrap()
-        };
-        info.lines += lines;
-        info.files += 1;
-        info.bytes += bytes;
+    fn add_file(&mut self, path: &PathBuf) {
+        if let Some(Ok(extension)) = path.extension().map(|os_str| {
+            Ok::<String, std::io::Error>(
+                os_str
+                    .to_str()
+                    .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "OsStr isn't a valid str"))?
+                    .to_string(),
+            )
+        }) {
+            if let Some(language) = LANGUAGES.get(&extension) {
+                let info = self.languages.iter_mut().find(|other_language| &other_language.name == language);
+                let info = if let Some(info) = info {
+                    info
+                } else {
+                    let value = LanguageInfo::new(language);
+                    self.languages.push(value);
+                    self.languages.last_mut().unwrap()
+                };
+                info.lines += std::fs::read(&path).unwrap().lines().count() as u32;
+                info.bytes += std::fs::metadata(&path).unwrap().size();
+                info.files.push(path.canonicalize().unwrap().to_str().unwrap().to_owned());
+            }
+        }
     }
 
     fn sort(&mut self) {
         self.languages.sort();
+    }
+
+    fn find(&self, language_name: &str) {
+        let language_name = language_name.to_lowercase();
+        for file in self
+            .languages
+            .iter()
+            .find(|language| language.name.to_lowercase() == language_name)
+            .map(|language| language.files.iter())
+            .unwrap_or_else(|| [].iter())
+        {
+            println!("{file}");
+        }
     }
 
     fn display(&self) {
@@ -81,7 +110,7 @@ impl LanguageList {
         let mut total_bytes = 0;
         let mut total_lines = 0;
         for language_info in &self.languages {
-            total_files += language_info.files;
+            total_files += language_info.files.len();
             total_lines += language_info.lines;
             total_bytes += language_info.bytes;
         }
@@ -94,8 +123,8 @@ impl LanguageList {
                 100 * language_info.bytes / total_bytes,
                 language_info.lines,
                 100 * language_info.lines / total_lines,
-                language_info.files,
-                100 * language_info.files / total_files
+                language_info.files.len(),
+                100 * language_info.files.len() / total_files
             );
         }
     }
@@ -115,6 +144,9 @@ struct Arguments {
 
     #[arg(value_enum, long, default_value_t = OutputFormat::HumanReadable)]
     output: OutputFormat,
+
+    #[arg(long)]
+    find: Option<String>,
 }
 
 fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mut LanguageList) {
@@ -137,22 +169,7 @@ fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mu
 
         // Files
         if path.is_file() {
-            if let Some(Ok(extension)) = path.extension().map(|os_str| {
-                Ok::<String, std::io::Error>(
-                    os_str
-                        .to_str()
-                        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "OsStr isn't a valid str"))?
-                        .to_string(),
-                )
-            }) {
-                if let Some(language) = LANGUAGES.get(&extension) {
-                    languages.add_file(
-                        language,
-                        std::fs::read(&path).unwrap().lines().count() as u32,
-                        std::fs::metadata(&path).unwrap().size(),
-                    )
-                }
-            }
+            languages.add_file(&path);
         }
     }
 }
