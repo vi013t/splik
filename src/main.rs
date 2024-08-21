@@ -91,11 +91,11 @@ impl LanguageList {
                 "{}: {} bytes ({}%), {} lines ({}%), {} files ({}%)",
                 language_info.name,
                 language_info.bytes,
-                language_info.bytes / total_bytes * 100,
+                100 * language_info.bytes / total_bytes,
                 language_info.lines,
-                language_info.lines / total_lines * 100,
+                100 * language_info.lines / total_lines,
                 language_info.files,
-                language_info.files / total_files * 100,
+                100 * language_info.files / total_files
             );
         }
     }
