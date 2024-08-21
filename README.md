@@ -44,13 +44,16 @@ Splik recognizes the following languages/extensions:
 | C                | `.c`, `.h`                                                   |
 | C++              | `.cpp`, `.cxx`, `.cc`, `.c++`, `.hpp`, `.hxx`, `.hh`, `.h++` |
 | C#               | `.cs`                                                        |
+| Fortran          | `.f`, `.for`, `.f90`, `.f95`                                 |
 | Gleam            | `.gleam`                                                     |
 | Go               | `.go`                                                        |
+| Haskell          | `.hs`, `.lhs`                                                |
 | Java             | `.java`                                                      |
 | JavaScript       | `.js`, `.mjs`, `.cjs`                                        |
 | JavaScript React | `.jsx`                                                       |
 | Kotlin           | `.kt`                                                        |
 | Lua              | `.lua`                                                       |
+| MATLAB           | `.m`                                                         |
 | PHP              | `.php`                                                       |
 | Python           | `.py`                                                        |
 | R                | `.r`                                                         |
@@ -58,8 +61,11 @@ Splik recognizes the following languages/extensions:
 | Rust             | `.rs`                                                        |
 | SQL              | `.sql`                                                       |
 | Svelte           | `.svelte`                                                    |
+| Swift            | `.swift`                                                     |
 | TypeScript       | `.ts`                                                        |
 | TypeScript React | `.tsx`                                                       |
 | V                | `.v`                                                         |
 | Vue              | `.vue`                                                       |
 | Zig              | `.zig`                                                       |
+
+
