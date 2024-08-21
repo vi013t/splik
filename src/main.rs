@@ -2,13 +2,13 @@ use std::{io::BufRead, os::unix::fs::MetadataExt};
 
 use clap::Parser as _;
 
-fn main() -> std::io::Result<()> {
+fn main() {
     let arguments = Arguments::parse();
 
     let source = if std::fs::read_dir("src").is_ok() { "./src" } else { "." };
     let mut languages = LanguageList::default();
 
-    analyze_directory(source, &arguments, &mut languages)?;
+    analyze_directory(source, &arguments, &mut languages);
 
     languages.sort();
 
@@ -17,8 +17,6 @@ fn main() -> std::io::Result<()> {
         OutputFormat::Json => println!("{}", serde_json::to_string(&languages).unwrap()),
         OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&languages).unwrap()),
     }
-
-    Ok(())
 }
 
 const IGNORED_DIRECTORIES: &'static [&'static str] = &["node_modules", "target", "dist", "build", "public", "out"];
@@ -119,9 +117,10 @@ struct Arguments {
     output: OutputFormat,
 }
 
-fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mut LanguageList) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(directory_name)? {
-        let path = entry?.path();
+fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mut LanguageList) {
+    let Ok(entries) = std::fs::read_dir(directory_name) else { return };
+    for entry in entries {
+        let Ok(path) = entry.map(|entry| entry.path()) else { return };
 
         // Dotifiles
         if arguments.ignore_dotfiles && path.starts_with(".") {
@@ -133,23 +132,19 @@ fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mu
             if IGNORED_DIRECTORIES.contains(&path.to_str().unwrap()) {
                 continue;
             }
-            analyze_directory(path.to_str().unwrap(), arguments, languages)?;
+            analyze_directory(path.to_str().unwrap(), arguments, languages);
         }
 
         // Files
         if path.is_file() {
-            if let Some(extension) = path
-                .extension()
-                .map(|os_str| {
-                    Ok::<String, std::io::Error>(
-                        os_str
-                            .to_str()
-                            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "OsStr isn't a valid str"))?
-                            .to_string(),
-                    )
-                })
-                .transpose()?
-            {
+            if let Some(Ok(extension)) = path.extension().map(|os_str| {
+                Ok::<String, std::io::Error>(
+                    os_str
+                        .to_str()
+                        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "OsStr isn't a valid str"))?
+                        .to_string(),
+                )
+            }) {
                 if let Some(language) = LANGUAGES.get(&extension) {
                     languages.add_file(
                         language,
@@ -160,8 +155,6 @@ fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mu
             }
         }
     }
-
-    Ok(())
 }
 
 const LANGUAGES: phf::Map<&'static str, &'static str> = phf::phf_map! {
