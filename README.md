@@ -38,7 +38,7 @@ The list of available options is as follows:
 Splik recognizes the following languages/extensions:
 
 | Language         | Extensions                                                   |
-|:----------------:|:------------------------------------------------------------:|
+|------------------|--------------------------------------------------------------|
 | Assembly         | `.asm`                                                       |
 | Bash             | `.bash`                                                      |
 | C                | `.c`, `.h`                                                   |
