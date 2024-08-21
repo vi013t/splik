@@ -139,7 +139,7 @@ enum OutputFormat {
 
 #[derive(clap::Parser)]
 struct Arguments {
-    #[arg(long)]
+    #[arg(long, default_value_t = true)]
     ignore_dotfiles: bool,
 
     #[arg(value_enum, long, default_value_t = OutputFormat::HumanReadable)]

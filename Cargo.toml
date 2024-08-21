@@ -3,7 +3,7 @@ name = "splik"
 authors = ["Violet"]
 description = "Simple programming language identifier kit."
 license = "MIT"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 
 [dependencies]
