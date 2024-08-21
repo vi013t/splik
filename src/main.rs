@@ -139,13 +139,13 @@ enum OutputFormat {
 
 #[derive(clap::Parser)]
 struct Arguments {
-    #[arg(long, default_value_t = true)]
-    ignore_dotfiles: bool,
+    #[arg(long, short = 'd')]
+    no_ignore_dotfiles: bool,
 
-    #[arg(value_enum, long, default_value_t = OutputFormat::HumanReadable)]
+    #[arg(value_enum, long, short, default_value_t = OutputFormat::HumanReadable)]
     output: OutputFormat,
 
-    #[arg(long)]
+    #[arg(long, short)]
     find: Option<String>,
 }
 
@@ -155,7 +155,7 @@ fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mu
         let Ok(path) = entry.map(|entry| entry.path()) else { return };
 
         // Dotifiles
-        if arguments.ignore_dotfiles && path.starts_with(".") {
+        if !arguments.no_ignore_dotfiles && path.file_name().unwrap().to_str().unwrap().starts_with(".") {
             continue;
         }
 
