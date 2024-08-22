@@ -24,6 +24,39 @@ fn main() {
     }
 }
 
+#[derive(clap::Parser)]
+struct Arguments {
+    /// Include files and folders that begin with a dot (.). By default, this is false, so
+    /// directories such as `.git`, `.vscode`, and `.cargo` are not included, as well as
+    /// files such as `.gitignore`. Setting this to true will include these files in the counts.
+    #[arg(long, short = 'd')]
+    include_dotfiles: bool,
+
+    /// The format of the output. The default is human-readable, which outputs in a pretty
+    /// format; But other formats such as JSON and YAML are available for tasks such as
+    /// script parsing.
+    #[arg(value_enum, long, short, default_value_t = OutputFormat::HumanReadable)]
+    output: OutputFormat,
+
+    /// List all files of the specified language. This will only list files which match
+    /// the given language, and each file will be listed with its absolute path.
+    #[arg(long, short)]
+    find: Option<String>,
+
+    /// Languages to exclude (case-insensitive). Language names specified here will not be
+    /// counted or displayed.
+    #[arg(long, short)]
+    exclude: Vec<String>,
+
+    /// Files and directories to include, which are excluded by default. For example, dotfiles,
+    /// such as `.git` and `.vscode` are ignored, but you can exclusively include one of them
+    /// with something like `splik --include .git`, while still ignoring all other dotfiles.
+    /// To include all dotfiles, use `--include-dotfiles`. Additionally, this can be used to
+    /// include non-dotfiles that are ignored by default, such as `node_modules`, `target`, etc.
+    #[arg(long, short)]
+    include: Vec<String>,
+}
+
 const IGNORED_DIRECTORIES: &'static [&'static str] = &["node_modules", "target", "dist", "build", "public", "out"];
 
 #[derive(serde::Serialize, PartialEq, Eq)]
@@ -63,7 +96,7 @@ struct LanguageList {
 }
 
 impl LanguageList {
-    fn add_file(&mut self, path: &PathBuf) {
+    fn add_file(&mut self, path: &PathBuf, arguments: &Arguments) {
         if let Some(Ok(extension)) = path.extension().map(|os_str| {
             Ok::<String, std::io::Error>(
                 os_str
@@ -73,6 +106,10 @@ impl LanguageList {
             )
         }) {
             if let Some(language) = LANGUAGES.get(&extension) {
+                if arguments.exclude.contains(&(*language).to_owned()) {
+                    return;
+                };
+
                 let info = self.languages.iter_mut().find(|other_language| &other_language.name == language);
                 let info = if let Some(info) = info {
                     info
@@ -106,6 +143,7 @@ impl LanguageList {
     }
 
     fn display(&self) {
+        // Calculate the total lines/files/bytes
         let mut total_files = 0;
         let mut total_bytes = 0;
         let mut total_lines = 0;
@@ -115,19 +153,52 @@ impl LanguageList {
             total_bytes += language_info.bytes;
         }
 
+        let mut other_bytes = 0;
+        let mut other_files = 0;
+        let mut other_lines = 0;
+
         for language_info in &self.languages {
+            let byte_percent = 100.0 * (language_info.bytes as f64) / (total_bytes as f64);
+
+            if byte_percent >= 1. {
+                println!(
+                    "{}: {} bytes ({}%), {} lines ({}%), {} files ({}%)",
+                    language_info.name,
+                    language_info.bytes,
+                    100 * language_info.bytes / total_bytes,
+                    language_info.lines,
+                    100 * language_info.lines / total_lines,
+                    language_info.files.len(),
+                    100 * language_info.files.len() / total_files
+                );
+            } else {
+                other_bytes += language_info.bytes;
+                other_files += language_info.files.len();
+                other_lines += language_info.lines;
+            }
+        }
+
+        // Print "other" languages
+        if other_bytes != 0 {
             println!(
-                "{}: {} bytes ({}%), {} lines ({}%), {} files ({}%)",
-                language_info.name,
-                language_info.bytes,
-                100 * language_info.bytes / total_bytes,
-                language_info.lines,
-                100 * language_info.lines / total_lines,
-                language_info.files.len(),
-                100 * language_info.files.len() / total_files
+                "Other: {} bytes ({}%), {} lines ({}%), {} files ({}%)",
+                other_bytes,
+                format_number(100.0 * (other_bytes as f64) / (total_bytes as f64)),
+                other_lines,
+                format_number(100.0 * (other_lines as f64) / (total_lines as f64)),
+                other_files,
+                format_number(100.0 * (other_files as f64) / (total_files as f64)),
             );
         }
     }
+}
+
+fn format_number(number: f64) -> String {
+    if number >= 1.0 {
+        return format!("{}", number as i32);
+    }
+
+    format!("{:.2}", number)
 }
 
 #[derive(Clone, clap::ValueEnum, Debug)]
@@ -137,31 +208,21 @@ enum OutputFormat {
     Yaml,
 }
 
-#[derive(clap::Parser)]
-struct Arguments {
-    #[arg(long, short = 'd')]
-    no_ignore_dotfiles: bool,
-
-    #[arg(value_enum, long, short, default_value_t = OutputFormat::HumanReadable)]
-    output: OutputFormat,
-
-    #[arg(long, short)]
-    find: Option<String>,
-}
-
 fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mut LanguageList) {
     let Ok(entries) = std::fs::read_dir(directory_name) else { return };
     for entry in entries {
+        // Get the path and skip it if it errors
         let Ok(path) = entry.map(|entry| entry.path()) else { return };
+        let pathname = path.canonicalize().unwrap().to_str().unwrap().to_owned();
 
         // Dotifiles
-        if !arguments.no_ignore_dotfiles && path.file_name().unwrap().to_str().unwrap().starts_with(".") {
+        if !arguments.include_dotfiles && path.file_name().unwrap().to_str().unwrap().starts_with(".") {
             continue;
         }
 
         // Directories
         if path.is_dir() {
-            if IGNORED_DIRECTORIES.contains(&path.to_str().unwrap()) {
+            if IGNORED_DIRECTORIES.contains(&(&pathname as &str)) && !arguments.include.contains(&pathname) {
                 continue;
             }
             analyze_directory(path.to_str().unwrap(), arguments, languages);
@@ -169,7 +230,7 @@ fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mu
 
         // Files
         if path.is_file() {
-            languages.add_file(&path);
+            languages.add_file(&path, arguments);
         }
     }
 }

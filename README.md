@@ -28,10 +28,14 @@ The list of available options is as follows:
 
 - `output [human-readable | json | yaml] (= human-readable)`
   - The output format. The default is human readable, but other formats can be specified for scripts to easily parse.
-- `no-ignore-dotfiles [bool] (= false)`
+- `include-dotfiles [bool] (= false)`
   - Whether to not ignore files *and directories* that start with a dot (`.`). This is off by default to ignore things like `.vscode`, `.git`, etc.
 - `find [string | null] (= null)`
   - Find all files of a given language instead of listing all languages. This will print absolute paths to all files of the given programming language, case-insensitive.
+- `exclude [string[]] (= [])`
+    - A list of languages to exclude from both the count and display.
+- `include [string[]] (= [])`
+    - A list of file / directory names that are ignored by default (`node_modules`, `target`, etc.) to include in the count and display.
 
 ## Reference
 
