@@ -8,15 +8,19 @@ fn main() {
     let source = if std::fs::read_dir("src").is_ok() { "./src" } else { "." };
     let mut languages = LanguageList::default();
 
+    // Generate the language information
     analyze_directory(source, &arguments, &mut languages);
 
+    // Sort by most used languages
     languages.sort();
 
+    // Find command
     if let Some(language) = arguments.find {
         languages.find(&language);
         return;
     }
 
+    // No subcommand
     match arguments.output {
         OutputFormat::HumanReadable => languages.display(),
         OutputFormat::Json => println!("{}", serde_json::to_string(&languages).unwrap()),
@@ -24,6 +28,7 @@ fn main() {
     }
 }
 
+/// splik (Simple Programming Language Identifier Kit)
 #[derive(clap::Parser)]
 struct Arguments {
     /// Include files and folders that begin with a dot (.). By default, this is false, so
@@ -55,15 +60,31 @@ struct Arguments {
     /// include non-dotfiles that are ignored by default, such as `node_modules`, `target`, etc.
     #[arg(long, short)]
     include: Vec<String>,
+
+    /// Do not search for a project root. By default, splik recursively searches up directories
+    /// for a "project root" directory, by looking for common indicators such as `.git`,
+    /// `node_modules`, `Cargo.toml`, etc. This allows splik to be run from within a project,
+    /// and give the project-wide statistics. Using the `--here` flag disables this behavior, and
+    /// makes it so that splik is run on the literal directory specified, and includes all files in
+    /// that directory and none of its parent directories. For example, splik will search for a
+    /// `src` directory by default and only search there, but using `--here` specifies splik to run
+    /// raw on the given directory.
+    #[arg(long, short = 'r')]
+    here: bool,
 }
 
 const IGNORED_DIRECTORIES: &'static [&'static str] = &["node_modules", "target", "dist", "build", "public", "out"];
 
+/// Information about a programming language within some directory context.
 #[derive(serde::Serialize, PartialEq, Eq)]
 struct LanguageInfo {
+    /// The name of the language. This should be fetched from the `LANGUAGES` map.
     name: &'static str,
+    /// The files of this language type.
     files: Vec<String>,
+    /// The number of lines of this language that exist.
     lines: u32,
+    /// The number of bytes of this language that exist.
     bytes: u64,
 }
 
@@ -210,9 +231,9 @@ enum OutputFormat {
 
 fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mut LanguageList) {
     let Ok(entries) = std::fs::read_dir(directory_name) else { return };
-    for entry in entries {
-        // Get the path and skip it if it errors
-        let Ok(path) = entry.map(|entry| entry.path()) else { return };
+    for entry in entries.filter_map(|entry| entry.ok()) {
+        // Get the path and pathname
+        let path = entry.path();
         let pathname = path.canonicalize().unwrap().to_str().unwrap().to_owned();
 
         // Dotifiles
@@ -279,3 +300,21 @@ const LANGUAGES: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "vue" => "Vue",
     "zig" => "Zig",
 };
+
+const ROOT_INDICATORS: &'static [&'static str] = &[
+    ".git",
+    ".gitignore",
+    "node_modules",
+    "Cargo.toml",
+    "build.zig",
+    "pyproject.toml",
+    ".luarc.json",
+    "tsconfig.json",
+    ".prettierrc",
+    ".prettierrc.json",
+    ".prettierrc.toml",
+    "README.md",
+    "README",
+    "LICENSE",
+    "index.html",
+];

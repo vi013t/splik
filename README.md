@@ -72,4 +72,9 @@ Splik recognizes the following languages/extensions:
 | Vue              | `.vue`                                                       |
 | Zig              | `.zig`                                                       |
 
+## Limitations
 
+Splik is limited in a few ways:
+
+- The language of a file is determined purely by its extension/name. The actual contents of the file are not analyzed. This can lead to inaccuracies - i.e., theres nothing stopping you from renaming `main.c` to `main.py`, and splik will think it's a Python file.
+- Splik operates off of a known list of languages, meaning any new languages need to be manually contributed to splik itself before it can be recognized. Once a new language is added, all users of the tool will need to update splik to be able to recognize that language.
