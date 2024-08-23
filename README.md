@@ -7,6 +7,7 @@ Splik can:
 - Calculate the total bytes, lines, and files for all recognized programming language files within a directory
 - Display the list of languages and their information sorted from most used to least
 - List all files in a directory that are of a given programming language
+- Identify project root directory using common indicators (`.git`, `node_modules`, `Cargo.toml`, etc.)
 
 ## Installation
 
@@ -32,10 +33,14 @@ The list of available options is as follows:
   - Whether to not ignore files *and directories* that start with a dot (`.`). This is off by default to ignore things like `.vscode`, `.git`, etc.
 - `find [string | null] (= null)`
   - Find all files of a given language instead of listing all languages. This will print absolute paths to all files of the given programming language, case-insensitive.
+- `find-root [boolean] (= false)`
+    - Find and print the project root directory using common indicators (`.git`, `Cargo.toml`, `node_modules`).
 - `exclude [string[]] (= [])`
     - A list of languages to exclude from both the count and display.
 - `include [string[]] (= [])`
     - A list of file / directory names that are ignored by default (`node_modules`, `target`, etc.) to include in the count and display.
+- `here [boolean] (= false)`
+     - Do not search for a root directory; Run `splik` on the current directory.
 
 ## Reference
 

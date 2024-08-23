@@ -1,15 +1,30 @@
-use std::{io::BufRead, os::unix::fs::MetadataExt, path::PathBuf};
-
-use clap::Parser as _;
+use std::{io::BufRead as _, os::unix::fs::MetadataExt as _};
 
 fn main() {
-    let arguments = Arguments::parse();
-
-    let source = if std::fs::read_dir("src").is_ok() { "./src" } else { "." };
+    let arguments = <Arguments as clap::Parser>::parse();
     let mut languages = LanguageList::default();
 
+    // Get the root directory
+    let source = arguments
+        .directory_path
+        .clone()
+        .unwrap_or(std::path::PathBuf::from(".").canonicalize().unwrap().to_str().unwrap().to_owned());
+    let root = if arguments.here {
+        source
+    } else {
+        get_root_dir(&std::path::PathBuf::from(&source))
+            .map(|path| path.to_str().unwrap().to_owned())
+            .unwrap_or(source)
+    };
+
+    // Find root command
+    if arguments.find_root {
+        println!("{root}");
+        return;
+    }
+
     // Generate the language information
-    analyze_directory(source, &arguments, &mut languages);
+    analyze_directory(&root, &arguments, &mut languages);
 
     // Sort by most used languages
     languages.sort();
@@ -31,6 +46,11 @@ fn main() {
 /// splik (Simple Programming Language Identifier Kit)
 #[derive(clap::Parser)]
 struct Arguments {
+    /// The directory path to run splik on. If not specified, splik will default to the
+    /// current directory.
+    #[clap()]
+    directory_path: Option<String>,
+
     /// Include files and folders that begin with a dot (.). By default, this is false, so
     /// directories such as `.git`, `.vscode`, and `.cargo` are not included, as well as
     /// files such as `.gitignore`. Setting this to true will include these files in the counts.
@@ -47,6 +67,11 @@ struct Arguments {
     /// the given language, and each file will be listed with its absolute path.
     #[arg(long, short)]
     find: Option<String>,
+
+    /// List the root directory for the current project. This will print nothing if no root
+    /// directory can be identified.
+    #[arg(long)]
+    find_root: bool,
 
     /// Languages to exclude (case-insensitive). Language names specified here will not be
     /// counted or displayed.
@@ -73,6 +98,29 @@ struct Arguments {
     here: bool,
 }
 
+/// Returns the root directory of the project that the given directory is located in, if one could
+/// be detected. This recursively checks the parent directory, looking for common project root
+/// indicators like `.git` or `node_modules`. If the system root is reached and no directory was
+/// identified as a recognized project root, `None` is returned.
+///
+/// # Parameters
+///
+/// - `directory_path` - The path of the directory to start at. This should be a directory *inside*
+/// the project.
+///
+/// # Returns
+/// - The project root directory path, or `None` if none couldbe identified.
+fn get_root_dir(directory_path: &std::path::PathBuf) -> Option<std::path::PathBuf> {
+    for root in ROOT_INDICATORS {
+        if directory_path.join(root).exists() {
+            return Some(directory_path.to_owned());
+        }
+    }
+
+    directory_path.parent().map(|parent| get_root_dir(&parent.to_path_buf())).flatten()
+}
+
+/// Directory names that are ignored by default.
 const IGNORED_DIRECTORIES: &'static [&'static str] = &["node_modules", "target", "dist", "build", "public", "out"];
 
 /// Information about a programming language within some directory context.
@@ -101,6 +149,8 @@ impl Ord for LanguageInfo {
 }
 
 impl LanguageInfo {
+    /// Creates a new `LanguageInfo` with the given language name. The language name should come
+    /// from a value of the `LANGUAGES` map.
     fn new(name: &'static str) -> Self {
         Self {
             name,
@@ -117,7 +167,16 @@ struct LanguageList {
 }
 
 impl LanguageList {
-    fn add_file(&mut self, path: &PathBuf, arguments: &Arguments) {
+    /// Reads a file and counts it towards the language totals. This will detect the language based
+    /// on the file's extension, and if it is recognized, adds it to the languages file/line/byte
+    /// count.
+    ///
+    /// # Parameters
+    /// - `path` - The path of the file
+    /// - `arguments` - The arguments provided to splik at the command line. This is used to check
+    /// for special inclusions/exclusions, see the `--include` and `--exclude` flags on
+    /// `Arguments`.
+    fn add_file(&mut self, path: &std::path::PathBuf, arguments: &Arguments) {
         if let Some(Ok(extension)) = path.extension().map(|os_str| {
             Ok::<String, std::io::Error>(
                 os_str
@@ -127,10 +186,12 @@ impl LanguageList {
             )
         }) {
             if let Some(language) = LANGUAGES.get(&extension) {
+                // Ignore excluded language
                 if arguments.exclude.contains(&(*language).to_owned()) {
                     return;
                 };
 
+                // Get the language info, or generate it if that language hasn't been found before
                 let info = self.languages.iter_mut().find(|other_language| &other_language.name == language);
                 let info = if let Some(info) = info {
                     info
@@ -139,6 +200,8 @@ impl LanguageList {
                     self.languages.push(value);
                     self.languages.last_mut().unwrap()
                 };
+
+                // Update the language info
                 info.lines += std::fs::read(&path).unwrap().lines().count() as u32;
                 info.bytes += std::fs::metadata(&path).unwrap().size();
                 info.files.push(path.canonicalize().unwrap().to_str().unwrap().to_owned());
@@ -234,16 +297,16 @@ fn analyze_directory(directory_name: &str, arguments: &Arguments, languages: &mu
     for entry in entries.filter_map(|entry| entry.ok()) {
         // Get the path and pathname
         let path = entry.path();
-        let pathname = path.canonicalize().unwrap().to_str().unwrap().to_owned();
+        let filename = path.file_name().unwrap().to_str().unwrap();
 
         // Dotifiles
-        if !arguments.include_dotfiles && path.file_name().unwrap().to_str().unwrap().starts_with(".") {
+        if !arguments.include_dotfiles && filename.starts_with(".") {
             continue;
         }
 
         // Directories
         if path.is_dir() {
-            if IGNORED_DIRECTORIES.contains(&(&pathname as &str)) && !arguments.include.contains(&pathname) {
+            if IGNORED_DIRECTORIES.contains(&filename) && !arguments.include.contains(&filename.to_owned()) {
                 continue;
             }
             analyze_directory(path.to_str().unwrap(), arguments, languages);
