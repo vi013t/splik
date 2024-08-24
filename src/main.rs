@@ -1,4 +1,4 @@
-use std::{io::BufRead as _, os::unix::fs::MetadataExt as _};
+use std::io::BufRead as _;
 
 fn main() {
     let arguments = <Arguments as clap::Parser>::parse();
@@ -203,7 +203,7 @@ impl LanguageList {
 
                 // Update the language info
                 info.lines += std::fs::read(&path).unwrap().lines().count() as u32;
-                info.bytes += std::fs::metadata(&path).unwrap().size();
+                info.bytes += std::fs::metadata(&path).unwrap().len();
                 info.files.push(path.canonicalize().unwrap().to_str().unwrap().to_owned());
             }
         }
